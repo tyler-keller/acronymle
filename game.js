@@ -25,7 +25,7 @@ const PARTS = EXPANSION.split(" ").map((w) => ({ text: w.replace("~", "").toUppe
 const SLOTS = PARTS.filter((p) => !p.conn).map((p) => p.text);
 
 // ---------- state ----------
-const KEY = PRACTICE ? null : `acronymal:day:${puzzleNo}`;
+const KEY = PRACTICE ? null : `acronymle:day:${puzzleNo}`;
 let state = (KEY && JSON.parse(localStorage.getItem(KEY) || "null")) || { guesses: [], status: "playing" };
 let typed = []; // letters for the editable positions of the current row
 const save = () => KEY && localStorage.setItem(KEY, JSON.stringify(state));
@@ -156,7 +156,7 @@ function submit() {
 // ---------- end, stats, share ----------
 function recordStats() {
   if (PRACTICE) return;
-  const s = JSON.parse(localStorage.getItem("acronymal:stats") || '{"played":0,"won":0,"streak":0,"best":0,"dist":[0,0,0,0,0,0],"last":0}');
+  const s = JSON.parse(localStorage.getItem("acronymle:stats") || '{"played":0,"won":0,"streak":0,"best":0,"dist":[0,0,0,0,0,0],"last":0}');
   if (s.lastRecorded === puzzleNo) return;
   s.played++;
   if (state.status === "won") {
@@ -164,12 +164,12 @@ function recordStats() {
     s.streak = s.last === puzzleNo - 1 ? s.streak + 1 : 1; s.best = Math.max(s.best, s.streak);
   } else s.streak = 0;
   s.last = state.status === "won" ? puzzleNo : s.last; s.lastRecorded = puzzleNo;
-  localStorage.setItem("acronymal:stats", JSON.stringify(s));
+  localStorage.setItem("acronymle:stats", JSON.stringify(s));
 }
 function showEnd() {
   $("#end-title").textContent = state.status === "won" ? ["Genius", "Brilliant", "Sharp", "Nice", "Solid", "Phew"][state.guesses.length - 1] : "Out of guesses";
   $("#end-answer").innerHTML = `<b>${ACRO}</b> = ${PARTS.map((p) => p.conn ? p.text.toLowerCase() : `<b>${p.text[0]}</b>${p.text.slice(1).toLowerCase()}`).join(" ")}`;
-  const s = JSON.parse(localStorage.getItem("acronymal:stats") || "null");
+  const s = JSON.parse(localStorage.getItem("acronymle:stats") || "null");
   $("#stats").innerHTML = PRACTICE || !s ? "" : `
     <div class="nums"><div><b>${s.played}</b><span>Played</span></div><div><b>${Math.round(100 * s.won / s.played)}</b><span>Win %</span></div>
     <div><b>${s.streak}</b><span>Streak</span></div><div><b>${s.best}</b><span>Best</span></div></div>
@@ -182,7 +182,7 @@ function shareText() {
     const sc = score(g[s], ans).slice(1);
     return sc.every((v) => v === "correct") ? "🟩" : sc.some((v) => v !== "absent") ? "🟨" : "⬛";
   }).join(""));
-  const head = PRACTICE ? `Acronymal practice ${ACRO}` : `Acronymal #${puzzleNo} ${ACRO}`;
+  const head = PRACTICE ? `Acronymle practice ${ACRO}` : `Acronymle #${puzzleNo} ${ACRO}`;
   return `${head} ${state.status === "won" ? state.guesses.length : "X"}/${MAX_GUESSES}\n${rows.join("\n")}\n${location.origin}${location.pathname}`;
 }
 $("#btn-share").addEventListener("click", async () => {
@@ -199,5 +199,5 @@ $("#btn-help").addEventListener("click", () => $("#dlg-help").showModal());
 $("#btn-stats").addEventListener("click", () => (state.status === "playing" ? toast("Finish today's puzzle first") : showEnd()));
 
 render();
-if (!localStorage.getItem("acronymal:seen")) { localStorage.setItem("acronymal:seen", "1"); $("#dlg-help").showModal(); }
+if (!localStorage.getItem("acronymle:seen")) { localStorage.setItem("acronymle:seen", "1"); $("#dlg-help").showModal(); }
 else if (state.status !== "playing") setTimeout(showEnd, 300);

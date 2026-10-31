@@ -1,4 +1,4 @@
-# Acronymal
+# Acronymle
 
 Daily acronym puzzle: work out what the letters stand for. Plain HTML/CSS/JS, no build step.
 
