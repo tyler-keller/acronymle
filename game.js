@@ -55,14 +55,30 @@ function currentWords() {
 }
 
 // ---------- rendering ----------
-function tile(ch, cls) { const t = document.createElement("span"); t.className = "tile " + cls; t.textContent = ch.trim(); return t; }
+function tile(ch, cls) { const t = document.createElement("span"); t.className = "tile " + cls; t.textContent = ch.trim(); t.setAttribute("aria-hidden", "true"); return t; }
+const RES_WORD = { correct: "right", present: "elsewhere", absent: "not in word" };
+// Spoken summary of a scored guess (tiles themselves are aria-hidden).
+function describeGuess(words) {
+  return SLOTS.map((ans, s) => {
+    const w = words[s], sc = score(w, ans);
+    if (w === ans) return `${w}: solved`;
+    return `${w}: ` + [...w].slice(1).map((ch, i) => `${ch} ${RES_WORD[sc[i + 1]]}`).join(", ");
+  }).join(". ");
+}
+function describeActive(words) {
+  const solved = solvedSlots();
+  return "Current guess: " + SLOTS.map((ans, s) => solved[s] ? `${ans} (locked)` : [...words[s]].map((c) => c.trim() || "blank").join(" ")).join(", ");
+}
 function renderRow(kind, words, extra) {
   const row = document.createElement("div");
   row.className = "guess " + (kind === "active" ? "active" : "") + (extra || "");
+  row.setAttribute("role", "group");
+  if (kind === "done") row.setAttribute("aria-label", describeGuess(words));
+  else if (kind === "active") row.setAttribute("aria-label", describeActive(words));
   const solved = solvedSlots(), edit = editablePositions(), cursor = edit[typed.length];
   let s = 0;
   for (const part of PARTS) {
-    if (part.conn) { const c = document.createElement("span"); c.className = "conn"; c.textContent = part.text.toLowerCase(); row.append(c); continue; }
+    if (part.conn) { const c = document.createElement("span"); c.className = "conn"; c.setAttribute("aria-hidden", "true"); c.textContent = part.text.toLowerCase(); row.append(c); continue; }
     const wEl = document.createElement("span"); wEl.className = "word";
     const ans = SLOTS[s];
     if (kind === "done") {
@@ -86,7 +102,8 @@ function renderRow(kind, words, extra) {
   return row;
 }
 function render(revealLast) {
-  $("#acronym").innerHTML = ACRO.split("").map((c) => `<span>${c}</span>`).join("");
+  $("#acronym").innerHTML = ACRO.split("").map((c) => `<span aria-hidden="true">${c}</span>`).join("");
+  $("#acronym").setAttribute("aria-label", `Acronym: ${ACRO.split("").join(" ")}. ${SLOTS.length} words, ${PARTS.length - SLOTS.length} given.`);
   $("#category").textContent = CATEGORY;
   $("#number").textContent = PRACTICE ? `Practice #${puzzleIdx + 1}` : `#${puzzleNo}`;
   const b = $("#board"); b.innerHTML = "";
@@ -112,23 +129,36 @@ function keyStates() {
   });
   return st;
 }
-function renderKeys() {
-  const kb = $("#keyboard"), st = keyStates(); kb.innerHTML = "";
+const KEY_SAY = { green: "right spot somewhere", hit: "in a word, wrong spot", miss: "not used" };
+function buildKeys() {
+  const kb = $("#keyboard");
   for (const r of ROWS) {
     const row = document.createElement("div"); row.className = "krow";
     for (const k of r) {
-      const b = document.createElement("button"); b.className = "key";
-      if (k === "↵") { b.textContent = "ENTER"; b.classList.add("wide"); b.dataset.k = "Enter"; }
-      else if (k === "⌫") { b.textContent = "⌫"; b.classList.add("wide"); b.dataset.k = "Backspace"; }
-      else { b.textContent = k; b.dataset.k = k; if (st[k]) b.classList.add(st[k]); }
+      const b = document.createElement("button"); b.type = "button"; b.className = "key";
+      if (k === "↵") { b.textContent = "ENTER"; b.classList.add("wide"); b.dataset.k = "Enter"; b.setAttribute("aria-label", "Submit guess"); }
+      else if (k === "⌫") { b.textContent = "⌫"; b.classList.add("wide"); b.dataset.k = "Backspace"; b.setAttribute("aria-label", "Delete letter"); }
+      else { b.textContent = k; b.dataset.k = k; }
       row.append(b);
     }
     kb.append(row);
   }
 }
-$("#keyboard").addEventListener("click", (e) => { const k = e.target.closest(".key"); if (k) press(k.dataset.k); });
+function renderKeys() {
+  const st = keyStates();
+  for (const b of document.querySelectorAll("#keyboard .key")) {
+    const k = b.dataset.k; if (k.length !== 1) continue;
+    b.classList.remove("green", "hit", "miss");
+    if (st[k]) b.classList.add(st[k]);
+    b.setAttribute("aria-label", st[k] ? `${k}, ${KEY_SAY[st[k]]}` : k);
+  }
+}
+buildKeys();
+// Mouse/touch clicks drop focus so a later physical Enter submits; keyboard (Tab + Enter/Space) keeps focus on the key.
+$("#keyboard").addEventListener("click", (e) => { const k = e.target.closest(".key"); if (!k) return; if (e.detail > 0) k.blur(); press(k.dataset.k); });
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector("dialog[open]")) return;
+  if ((e.key === "Enter" || e.key === " ") && e.target.closest && e.target.closest("button, a")) return; // let focused controls activate
   if (e.key === "Enter" || e.key === "Backspace") { e.preventDefault(); press(e.key); }
   else if (/^[a-z]$/i.test(e.key)) press(e.key.toUpperCase());
 });
@@ -149,6 +179,7 @@ function submit() {
   if (won) state.status = "won";
   else if (state.guesses.length >= MAX_GUESSES) state.status = "lost";
   save(); render(true);
+  $("#sr").textContent = `Guess ${state.guesses.length}. ` + describeGuess(words);
   if (state.status !== "playing") { recordStats(); setTimeout(showEnd, 700); }
   else { const newly = solvedSlots().filter(Boolean).length; if (newly) toast(`${newly}/${SLOTS.length} words locked`); }
 }
@@ -174,9 +205,19 @@ function showEnd() {
     <div class="nums"><div><b>${s.played}</b><span>Played</span></div><div><b>${Math.round(100 * s.won / s.played)}</b><span>Win %</span></div>
     <div><b>${s.streak}</b><span>Streak</span></div><div><b>${s.best}</b><span>Best</span></div></div>
     <div class="dist">${s.dist.map((n, i) => `<div>${i + 1} <i class="${state.status === "won" && state.guesses.length === i + 1 ? "me" : ""}" style="width:${8 + 92 * n / Math.max(1, ...s.dist)}%">${n}</i></div>`).join("")}</div>`;
-  $("#end-next").textContent = PRACTICE ? "" : "Next puzzle at midnight.";
+  tickNext();
   $("#dlg-end").showModal();
 }
+let nextTimer;
+function tickNext() {
+  clearTimeout(nextTimer);
+  if (PRACTICE) { $("#end-next").textContent = ""; return; }
+  const now = new Date(), mid = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const left = Math.max(0, Math.floor((mid - now) / 1000)), h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60), s = left % 60;
+  $("#end-next").textContent = left ? `Next puzzle in ${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : "New puzzle ready: reload";
+  if (left && $("#dlg-end").open) nextTimer = setTimeout(tickNext, 1000);
+}
+$("#dlg-end").addEventListener("close", () => clearTimeout(nextTimer));
 function shareText() {
   const rows = state.guesses.map((g) => SLOTS.map((ans, s) => {
     const sc = score(g[s], ans).slice(1);
